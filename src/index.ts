@@ -145,11 +145,11 @@ discordClient.on("messageCreate", async (message: Message) => {
       }
 
       const userList = users
-        .map((user) => `✅ ${user.username}:${user.userId}`)
+        .map((user) => `${user.username}:${user.userId}`)
         .join("\n");
 
-      // Split the user list into chunks of 2000 characters (discord max message size)
-      const chunkSize = 2000;
+      // Split the user list into chunks of 1980 characters (discord max message size is 2000)
+      const chunkSize = 1980;
       let chunkStart = 0;
 
       while (chunkStart < userList.length) {
