@@ -29,7 +29,7 @@ async function getUsersFromSheet(guildId: string): Promise<User[]> {
     const rows = response.data.values || [];
     return rows.slice(1).map(([userId, username]) => ({ userId, username }));
   } catch (error) {
-    console.error("Error fetching Google Sheet:", error);
+    console.error("Error fetching users:", error);
     return [];
   }
 }
@@ -48,7 +48,7 @@ async function addUserToSheet(
     });
     return `✅ User ID **${userId}** (Name: **${username}**) has been added!`;
   } catch (error) {
-    console.error("Error adding user to Google Sheet:", error);
+    console.error("Error adding user:", error);
     return `❌ Failed to add User ID **${userId}**.`;
   }
 }
@@ -109,7 +109,7 @@ async function deleteUserFromSheet(
 
     return `✅ User ID **${userId}** has been deleted.`;
   } catch (error) {
-    console.error("Error deleting user from Google Sheet:", error);
+    console.error("Error deleting user:", error);
     return `❌ Failed to delete User ID **${userId}**.`;
   }
 }

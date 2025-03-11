@@ -64,7 +64,7 @@ async function redeemForUser(
   } catch (error) {
     await browser.close();
     console.error(
-      `Error redeeming code for user ${username}:${userId} from Google Sheet:`,
+      `Error redeeming code for user ${username}:${userId}:`,
       error
     );
     return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
@@ -79,7 +79,7 @@ discordClient.on("messageCreate", async (message: Message) => {
   const args = message.content.split(" ");
 
   switch (args[0]) {
-    case "!redeem":
+    case "!redeem": {
       if (args.length != 2) {
         return message.reply("⚠️ Usage: `!redeem <giftcode>");
       }
@@ -89,23 +89,24 @@ discordClient.on("messageCreate", async (message: Message) => {
 
       const users = await getUsersFromSheet(guildId);
       if (users.length === 0) {
-        return message.reply("❌ No users found in the Google Sheet!");
+        return message.reply("❌ No users found!");
       }
 
       for (const user of users) {
-        const redeemResult = await redeemForUser(
+        const result = await redeemForUser(
           user.userId,
           user.username,
           giftCode
         );
 
-        await (message.channel as TextChannel).send(redeemResult);
+        await (message.channel as TextChannel).send(result);
       }
 
       message.reply("✅ Finished redeeming codes");
       break;
+    }
 
-    case "!add":
+    case "!add": {
       if (args.length != 3) {
         return message.reply(
           "⚠️ Usage: `!add <userId> <username> (no spaces in username)`"
@@ -118,21 +119,49 @@ discordClient.on("messageCreate", async (message: Message) => {
         );
       }
 
-      const addResult = await addUserToSheet(guildId, args[1], args[2]);
-      message.reply(addResult);
+      const result = await addUserToSheet(guildId, args[1], args[2]);
+      message.reply(result);
       break;
+    }
 
-    case "!delete":
+    case "!delete": {
       if (args.length != 2) {
         return message.reply("⚠️ Usage: `!delete <userId>`");
       }
 
-      const deleteResult = await deleteUserFromSheet(guildId, args[1]);
-      message.reply(deleteResult);
+      const result = await deleteUserFromSheet(guildId, args[1]);
+      message.reply(result);
       break;
+    }
+    case "!list": {
+      if (args.length != 1) {
+        return message.reply("⚠️ Usage: `!list`");
+      }
 
-    default:
+      const users = await getUsersFromSheet(guildId);
+
+      if (users.length === 0) {
+        return message.reply("❌ No users found!");
+      }
+
+      const userList = users
+        .map((user) => `✅ ${user.username}:${user.userId}`)
+        .join("\n");
+
+      // Split the user list into chunks of 2000 characters (discord max message size)
+      const chunkSize = 2000;
+      let chunkStart = 0;
+
+      while (chunkStart < userList.length) {
+        const chunk = userList.slice(chunkStart, chunkStart + chunkSize);
+        await (message.channel as TextChannel).send(chunk);
+        chunkStart += chunkSize;
+      }
+    }
+
+    default: {
       break;
+    }
   }
 });
 
