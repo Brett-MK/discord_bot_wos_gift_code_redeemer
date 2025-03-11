@@ -85,6 +85,9 @@ discordClient.on("messageCreate", (message) => __awaiter(void 0, void 0, void 0,
             if (args.length != 3) {
                 return message.reply("⚠️ Usage: `!add <userId> <username> (no spaces in username)`");
             }
+            if (typeof args[1] !== "number") {
+                ("⚠️ Usage: `!add <userId> <username> (no spaces in username)`");
+            }
             const addResult = yield addUserToSheet(guildId, args[1], args[2]);
             message.reply(addResult);
             break;
