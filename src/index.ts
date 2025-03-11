@@ -113,7 +113,9 @@ discordClient.on("messageCreate", async (message: Message) => {
       }
 
       if (typeof args[1] !== "number") {
-        ("⚠️ Usage: `!add <userId> <username> (no spaces in username)`");
+        return message.reply(
+          "⚠️ Usage: `!add <userId> <username> (no spaces in username)`"
+        );
       }
 
       const addResult = await addUserToSheet(guildId, args[1], args[2]);
