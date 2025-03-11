@@ -19,11 +19,11 @@ const auth = new google.auth.JWT({
 
 const sheets = google.sheets({ version: "v4", auth });
 
-async function getUsersFromSheet(): Promise<User[]> {
+async function getUsersFromSheet(guildId: string): Promise<User[]> {
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: "Alliance_100!A:B",
+      range: `Guild_${guildId}!A:B`,
     });
 
     const rows = response.data.values || [];
@@ -35,13 +35,14 @@ async function getUsersFromSheet(): Promise<User[]> {
 }
 
 async function addUserToSheet(
+  guildId: string,
   userId: string,
   username: string
 ): Promise<string> {
   try {
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: "Alliance_100!A:B",
+      range: `Guild_${guildId}!A:B`,
       valueInputOption: "RAW",
       requestBody: { values: [[userId, username]] },
     });
@@ -52,11 +53,28 @@ async function addUserToSheet(
   }
 }
 
-async function deleteUserFromSheet(userId: string): Promise<string> {
+async function deleteUserFromSheet(
+  guildId: string,
+  userId: string
+): Promise<string> {
   try {
+    const sheetMetadataResponse = await sheets.spreadsheets.get({
+      spreadsheetId: SHEET_ID,
+    });
+
+    const sheet = sheetMetadataResponse.data.sheets?.find(
+      (sheet) => sheet.properties?.title === `Guild_${guildId}`
+    );
+
+    if (!sheet || !sheet.properties?.sheetId) {
+      return `❌ Sheet for guild **${guildId}** not found.`;
+    }
+
+    const sheetId = sheet.properties.sheetId;
+
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: "Alliance_100!A:B",
+      range: `Guild_${guildId}!A:B`,
     });
 
     const rows = response.data.values;
@@ -78,7 +96,7 @@ async function deleteUserFromSheet(userId: string): Promise<string> {
           {
             deleteDimension: {
               range: {
-                sheetId: 0,
+                sheetId: sheetId,
                 dimension: "ROWS",
                 startIndex: userIndex, // Zero-based index
                 endIndex: userIndex + 1,
@@ -93,6 +111,43 @@ async function deleteUserFromSheet(userId: string): Promise<string> {
   } catch (error) {
     console.error("Error deleting user from Google Sheet:", error);
     return `❌ Failed to delete User ID **${userId}**.`;
+  }
+}
+
+export async function createGuildSheet(guildId: string, guildName: string) {
+  const sheetTitle = `Guild_${guildId}`;
+
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: SHEET_ID,
+  });
+
+  const sheetExists = spreadsheet.data.sheets?.some(
+    (sheet) => sheet.properties?.title === sheetTitle
+  );
+
+  if (!sheetExists) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: {
+        requests: [
+          {
+            addSheet: {
+              properties: { title: sheetTitle },
+            },
+          },
+        ],
+      },
+    });
+
+    // Initialize with headers
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${sheetTitle}!A1:B1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [["UserID", "Username"]] },
+    });
+
+    console.log(`✅ Created new sheet for ${guildName} (${guildId})`);
   }
 }
 

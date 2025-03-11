@@ -3,6 +3,7 @@ import { Client, GatewayIntentBits, Message, TextChannel } from "discord.js";
 import { chromium, Page } from "playwright";
 import {
   addUserToSheet,
+  createGuildSheet,
   deleteUserFromSheet,
   getUsersFromSheet,
 } from "./google-sheets.js";
@@ -39,8 +40,15 @@ async function redeemForUser(
     const loginBtn = page.locator(".login_btn");
     await loginBtn.click();
 
-    // Ensure login button disappears after login
-    await page.waitForSelector(".login_btn", { state: "hidden" });
+    try {
+      // Ensure login button disappears after login
+      await page.waitForSelector(".login_btn", {
+        state: "hidden",
+        timeout: 5000,
+      });
+    } catch (error) {
+      return `❌ ${username}:${userId} - check UserID, timed out logging in.`;
+    }
 
     // Fill in the gift code
     await page.fill('input[placeholder="Enter Gift Code"]', giftCode);
@@ -50,13 +58,6 @@ async function redeemForUser(
 
     // Get the message
     const message = await page.locator(".msg").textContent();
-
-    // // Click confirm and exit
-    // await page.locator(".confirm_btn").click();
-    // await page.locator(".exit_con").click();
-
-    // // Wait for 2 seconds before the next iteration
-    // await page.waitForTimeout(2000);
 
     await browser.close();
     return `✅ ${username}:${userId} - ${message}`;
@@ -71,6 +72,10 @@ async function redeemForUser(
 }
 
 discordClient.on("messageCreate", async (message: Message) => {
+  if (!message.guild || message.author.bot) return; // Ignore bot messages
+
+  const guildId = message.guild.id;
+
   const args = message.content.split(" ");
 
   switch (args[0]) {
@@ -82,7 +87,7 @@ discordClient.on("messageCreate", async (message: Message) => {
       const giftCode = args[1]; // Extract the gift code
       message.reply(`🔄 Redeeming code **${giftCode}** for all users...`);
 
-      const users = await getUsersFromSheet();
+      const users = await getUsersFromSheet(guildId);
       if (users.length === 0) {
         return message.reply("❌ No users found in the Google Sheet!");
       }
@@ -107,7 +112,7 @@ discordClient.on("messageCreate", async (message: Message) => {
         );
       }
 
-      const addResult = await addUserToSheet(args[1], args[2]);
+      const addResult = await addUserToSheet(guildId, args[1], args[2]);
       message.reply(addResult);
       break;
 
@@ -116,7 +121,7 @@ discordClient.on("messageCreate", async (message: Message) => {
         return message.reply("⚠️ Usage: `!delete <userId>`");
       }
 
-      const deleteResult = await deleteUserFromSheet(args[1]);
+      const deleteResult = await deleteUserFromSheet(guildId, args[1]);
       message.reply(deleteResult);
       break;
 
@@ -125,8 +130,20 @@ discordClient.on("messageCreate", async (message: Message) => {
   }
 });
 
-discordClient.once("ready", () => {
+discordClient.once("ready", async () => {
   console.log(`Logged in as ${discordClient.user?.tag}!`);
+
+  for (const guild of discordClient.guilds.cache.values()) {
+    await createGuildSheet(guild.id, guild.name);
+  }
+});
+
+/**
+ * When the bot joins a new server, create a new Google Sheet tab for it.
+ */
+discordClient.on("guildCreate", async (guild) => {
+  console.log(`📌 Joined new server: ${guild.name} (${guild.id})`);
+  await createGuildSheet(guild.id, guild.name);
 });
 
 discordClient.login(DISCORD_BOT_TOKEN);
