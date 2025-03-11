@@ -1,7 +1,7 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import { config } from "dotenv";
-import { Client, GatewayIntentBits, Message } from "discord.js";
+import { Client, GatewayIntentBits, Message, TextChannel } from "discord.js";
 import { chromium, Page } from "playwright";
 
 config();
@@ -196,10 +196,10 @@ client.on("messageCreate", async (message: Message) => {
 
     for (const user of users) {
       const result = await redeemForUser(user.userId, user.username, giftCode);
-      await message.reply(result);
+      await (message.channel as TextChannel).send(result);
     }
 
-    await message.reply("✅ Finished redeeming codes");
+    await (message.channel as TextChannel).send("✅ Finished redeeming codes");
   } else if (args[0] === "!add") {
     if (args.length < 3) {
       return message.reply(
