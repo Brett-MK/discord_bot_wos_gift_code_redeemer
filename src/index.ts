@@ -112,7 +112,7 @@ discordClient.on("messageCreate", async (message: Message) => {
         );
       }
 
-      if (typeof args[1] !== "number") {
+      if (isNaN(parseInt(args[1]))) {
         return message.reply(
           "⚠️ Usage: `!add <userId> <username> (no spaces in username)`"
         );
