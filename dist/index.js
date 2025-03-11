@@ -112,13 +112,22 @@ discordClient.on("messageCreate", (message) => __awaiter(void 0, void 0, void 0,
             const userList = users
                 .map((user) => `${user.username}:${user.userId}`)
                 .join("\n");
-            // Split the user list into chunks of 1980 characters (discord max message size is 2000)
-            const chunkSize = 1980;
+            // Split the user list into chunks of 2000 characters (discord max message size)
+            const chunkSize = 2000;
             let chunkStart = 0;
             while (chunkStart < userList.length) {
-                const chunk = userList.slice(chunkStart, chunkStart + chunkSize);
+                let chunkEnd = chunkStart + chunkSize;
+                // Ensure chunk does not cut off a username by looking back at the last new line
+                if (chunkEnd < userList.length) {
+                    // Find the last newline within the chunk size
+                    const lastNewLine = userList.lastIndexOf("\n", chunkEnd);
+                    if (lastNewLine > chunkStart) {
+                        chunkEnd = lastNewLine; // Adjust chunk end to avoid cutting off username
+                    }
+                }
+                const chunk = userList.slice(chunkStart, chunkEnd);
                 yield message.channel.send(chunk);
-                chunkStart += chunkSize;
+                chunkStart = chunkEnd; // Move the start of the next chunk
             }
         }
         default: {
