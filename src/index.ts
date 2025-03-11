@@ -1,128 +1,23 @@
-import { GoogleSpreadsheet } from "google-spreadsheet";
-import { JWT } from "google-auth-library";
 import { config } from "dotenv";
 import { Client, GatewayIntentBits, Message, TextChannel } from "discord.js";
 import { chromium, Page } from "playwright";
+import {
+  addUserToSheet,
+  deleteUserFromSheet,
+  getUsersFromSheet,
+} from "./google-sheets.js";
 
 config();
 
-const TOKEN = process.env.BOT_TOKEN!;
-const SHEET_ID = process.env.SHEET_ID!;
-const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL!;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY!.replace(
-  /\\n/g,
-  "\n"
-);
+const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
 
-const client = new Client({
+const discordClient = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
 });
-
-// Type for user
-interface User {
-  userId: string;
-  username: string;
-}
-
-// Function to get user IDs and names from Google Sheet
-async function getUsersFromSheet(): Promise<User[]> {
-  try {
-    const serviceAccountAuth = new JWT({
-      email: GOOGLE_CLIENT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-
-    const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
-    await doc.loadInfo(); // Load the spreadsheet info
-
-    const sheet = doc.sheetsByIndex[0]; // Assuming the first sheet contains user IDs and names
-    const rows = await sheet.getRows();
-
-    return rows.map((row) => ({
-      userId: row.get("UserID"),
-      username: row.get("Username"),
-    }));
-  } catch (error) {
-    console.error("Error fetching Google Sheet:", error);
-    return [];
-  }
-}
-
-// Function to add a new user ID and name to Google Sheet
-async function addUserToSheet(
-  userId: string,
-  username: string
-): Promise<string> {
-  try {
-    const serviceAccountAuth = new JWT({
-      email: GOOGLE_CLIENT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-
-    const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
-    await doc.loadInfo(); // Load the sheet info
-
-    const sheet = doc.sheetsByIndex[0];
-    const rows = await sheet.getRows();
-
-    const existingUserIds = rows.map((row) => row.get("UserID"));
-    if (existingUserIds.includes(userId)) {
-      return `⚠️ User ID **${userId}** is already in the list!`;
-    }
-
-    await sheet.addRow({ UserID: userId, Username: username }); // Add both User ID and User Name
-    return `✅ User ID **${userId}** (Name: **${username}**) has been added to the Google Sheet!`;
-  } catch (error: unknown) {
-    console.error("Error adding user to Google Sheet:", error);
-
-    if (error instanceof Error) {
-      return `❌ Failed to add User ID **${userId}**: ${error.message}`;
-    } else {
-      return `❌ Failed to add User ID **${userId}**`;
-    }
-  }
-}
-
-// Function to delete a user ID and their name from Google Sheet
-async function deleteUserFromSheet(userId: string): Promise<string> {
-  try {
-    const serviceAccountAuth = new JWT({
-      email: GOOGLE_CLIENT_EMAIL,
-      key: GOOGLE_PRIVATE_KEY,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-
-    const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
-    await doc.loadInfo(); // Load the sheet info
-
-    const sheet = doc.sheetsByIndex[0];
-    const rows = await sheet.getRows();
-
-    const userRow = rows.find((row) => row.get("UserID") === userId);
-
-    if (!userRow) {
-      return `❌ User ID **${userId}** not found in the Google Sheet.`;
-    }
-
-    // Delete the row if found
-    await userRow.delete();
-    return `✅ User ID **${userId}** has been deleted from the Google Sheet.`;
-  } catch (error: unknown) {
-    console.error("Error deleting user from Google Sheet:", error);
-
-    if (error instanceof Error) {
-      return `❌ Failed to delete User ID **${userId}**: ${error.message}`;
-    } else {
-      return `❌ Failed to delete User ID **${userId}**`;
-    }
-  }
-}
 
 // Function to log in and redeem for a given user ID with a gift code
 async function redeemForUser(
@@ -156,76 +51,82 @@ async function redeemForUser(
     // Get the message
     const message = await page.locator(".msg").textContent();
 
-    // Click confirm and exit
-    await page.locator(".confirm_btn").click();
-    await page.locator(".exit_con").click();
+    // // Click confirm and exit
+    // await page.locator(".confirm_btn").click();
+    // await page.locator(".exit_con").click();
 
-    // Wait for 2 seconds before the next iteration
-    await page.waitForTimeout(2000);
+    // // Wait for 2 seconds before the next iteration
+    // await page.waitForTimeout(2000);
 
     await browser.close();
     return `✅ ${username}:${userId} - ${message}`;
-  } catch (error: unknown) {
+  } catch (error) {
     await browser.close();
-    if (error instanceof Error) {
-      return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error.message}`;
-    } else {
-      return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}`;
-    }
+    console.error(
+      `Error redeeming code for user ${username}:${userId} from Google Sheet:`,
+      error
+    );
+    return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
   }
 }
 
-// Discord bot command handling
-client.on("messageCreate", async (message: Message) => {
+discordClient.on("messageCreate", async (message: Message) => {
   const args = message.content.split(" ");
 
-  if (args[0] === "!redeem") {
-    if (args.length < 2) {
-      return message.reply(
-        "⚠️ Please provide a gift code. Example: `redeem ABC123`"
-      );
-    }
+  switch (args[0]) {
+    case "!redeem":
+      if (args.length != 2) {
+        return message.reply("⚠️ Usage: `!redeem <giftcode>");
+      }
 
-    const giftCode = args[1]; // Extract the gift code
-    message.reply(`🔄 Redeeming code **${giftCode}** for all users...`);
+      const giftCode = args[1]; // Extract the gift code
+      message.reply(`🔄 Redeeming code **${giftCode}** for all users...`);
 
-    const users = await getUsersFromSheet();
-    if (users.length === 0) {
-      return message.reply("❌ No users found in the Google Sheet!");
-    }
+      const users = await getUsersFromSheet();
+      if (users.length === 0) {
+        return message.reply("❌ No users found in the Google Sheet!");
+      }
 
-    for (const user of users) {
-      const result = await redeemForUser(user.userId, user.username, giftCode);
-      await (message.channel as TextChannel).send(result);
-    }
+      for (const user of users) {
+        const redeemResult = await redeemForUser(
+          user.userId,
+          user.username,
+          giftCode
+        );
 
-    await (message.channel as TextChannel).send("✅ Finished redeeming codes");
-  } else if (args[0] === "!add") {
-    if (args.length < 3) {
-      return message.reply(
-        "⚠️ Please provide both User ID and User Name. Example: `add 123456789 JohnDoe`"
-      );
-    }
+        await (message.channel as TextChannel).send(redeemResult);
+      }
 
-    const userId = args[1]; // Extract the user ID
-    const username = args[2]; // Extract the user name
-    const result = await addUserToSheet(userId, username);
-    message.reply(result);
-  } else if (args[0] === "!delete") {
-    if (args.length < 2) {
-      return message.reply(
-        "⚠️ Please provide a User ID to delete. Example: `delete 123456789`"
-      );
-    }
+      message.reply("✅ Finished redeeming codes");
+      break;
 
-    const userId = args[1]; // Extract the user ID to delete
-    const result = await deleteUserFromSheet(userId);
-    message.reply(result);
+    case "!add":
+      if (args.length != 3) {
+        return message.reply(
+          "⚠️ Usage: `!add <userId> <username> (no spaces in username)`"
+        );
+      }
+
+      const addResult = await addUserToSheet(args[1], args[2]);
+      message.reply(addResult);
+      break;
+
+    case "!delete":
+      if (args.length != 2) {
+        return message.reply("⚠️ Usage: `!delete <userId>`");
+      }
+
+      const deleteResult = await deleteUserFromSheet(args[1]);
+      message.reply(deleteResult);
+      break;
+
+    default:
+      break;
   }
 });
 
-client.once("ready", () => {
-  console.log(`Logged in as ${client.user?.tag}!`);
+discordClient.once("ready", () => {
+  console.log(`Logged in as ${discordClient.user?.tag}!`);
 });
 
-client.login(TOKEN);
+discordClient.login(DISCORD_BOT_TOKEN);
