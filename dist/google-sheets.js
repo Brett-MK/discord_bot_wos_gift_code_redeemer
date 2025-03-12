@@ -38,6 +38,14 @@ function getUsersFromSheet(guildId) {
 function addUserToSheet(guildId, userId, username) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
+            const response = yield sheets.spreadsheets.values.get({
+                spreadsheetId: SHEET_ID,
+                range: `Guild_${guildId}!A:A`, // Get only the column with User IDs (column A)
+            });
+            const rows = response.data.values;
+            if (rows && rows.some((row) => row[0] === userId)) {
+                return `❌ User ID **${userId}** already exists in the sheet.`;
+            }
             yield sheets.spreadsheets.values.append({
                 spreadsheetId: SHEET_ID,
                 range: `Guild_${guildId}!A:B`,
