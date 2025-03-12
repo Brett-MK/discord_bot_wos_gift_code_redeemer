@@ -99,6 +99,7 @@ discordClient.on("messageCreate", (message) => __awaiter(void 0, void 0, void 0,
                 return message.reply(LIST_HELP_MESSAGE);
             }
             yield handleListUsers(message, guildId);
+            break;
         }
         case "!help": {
             if (args.length != 1) {
@@ -110,7 +111,8 @@ discordClient.on("messageCreate", (message) => __awaiter(void 0, void 0, void 0,
                 DELETE_HELP_MESSAGE,
                 REDEEM_HELP_MESSAGE,
             ];
-            return message.reply(helpMessages.join("\n"));
+            message.reply(helpMessages.join("\n"));
+            break;
         }
         default: {
             break;

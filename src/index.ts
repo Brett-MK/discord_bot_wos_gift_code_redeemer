@@ -127,6 +127,7 @@ discordClient.on("messageCreate", async (message: Message) => {
       }
 
       await handleListUsers(message, guildId);
+      break;
     }
 
     case "!help": {
@@ -141,7 +142,8 @@ discordClient.on("messageCreate", async (message: Message) => {
         REDEEM_HELP_MESSAGE,
       ];
 
-      return message.reply(helpMessages.join("\n"));
+      message.reply(helpMessages.join("\n"));
+      break;
     }
 
     default: {
