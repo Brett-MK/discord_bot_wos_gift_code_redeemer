@@ -1,11 +1,11 @@
-import { Browser, chromium, Page } from "playwright";
+import { chromium, Page } from "playwright";
 
 async function redeemForUser(
   userId: string,
   username: string,
-  giftCode: string,
-  browser: Browser
+  giftCode: string
 ): Promise<string> {
+  const browser = await chromium.launch({ headless: true });
   const page: Page = await browser.newPage();
 
   try {
@@ -46,7 +46,7 @@ async function redeemForUser(
     );
     return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
   } finally {
-    await page.close();
+    await browser.close();
   }
 }
 

@@ -7,8 +7,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-function redeemForUser(userId, username, giftCode, browser) {
+import { chromium } from "playwright";
+function redeemForUser(userId, username, giftCode) {
     return __awaiter(this, void 0, void 0, function* () {
+        const browser = yield chromium.launch({ headless: true });
         const page = yield browser.newPage();
         try {
             // Go to the URL
@@ -34,14 +36,13 @@ function redeemForUser(userId, username, giftCode, browser) {
             yield page.locator(".exchange_btn").click();
             // Get the message
             const message = yield page.locator(".msg").textContent();
+            yield browser.close();
             return `✅ ${username}:${userId} - ${message}`;
         }
         catch (error) {
+            yield browser.close();
             console.error(`Error redeeming code for user ${username}:${userId}:`, error);
             return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
-        }
-        finally {
-            yield page.close();
         }
     });
 }

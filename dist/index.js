@@ -9,14 +9,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 import { config } from "dotenv";
 import { Client, GatewayIntentBits } from "discord.js";
-import { chromium } from "playwright";
 import { addUserToSheet, createGuildSheet, deleteUserFromSheet, getUsersFromSheet, } from "./google-sheets.js";
 import { redeemForUser } from "./redeem-helper.js";
 import { ADD_HELP_MESSAGE, DELETE_HELP_MESSAGE, HELP_MESSAGE, LIST_HELP_MESSAGE, REDEEM_HELP_MESSAGE, } from "./help-messages.const.js";
-import pLimit from "p-limit";
 config();
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-const limit = pLimit(5);
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -24,39 +21,17 @@ const discordClient = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
-function chunk(array, size) {
-    const chunks = [];
-    for (let i = 0; i < array.length; i += size) {
-        chunks.push(array.slice(i, i + size));
-    }
-    return chunks;
-}
 function handleRedeemMessage(message, guildId, giftCode) {
     return __awaiter(this, void 0, void 0, function* () {
         const users = yield getUsersFromSheet(guildId);
         if (users.length === 0) {
             return "❌ No users found!";
         }
-        const browser = yield chromium.launch({ headless: true });
-        const userBatches = chunk(users, 10);
-        try {
-            for (const batch of userBatches) {
-                const redeemPromises = batch.map((user) => __awaiter(this, void 0, void 0, function* () {
-                    const { userId, username } = user;
-                    const result = yield limit(() => redeemForUser(userId, username, giftCode, browser));
-                    yield message.channel.send(result);
-                }));
-                yield Promise.all(redeemPromises);
-            }
-            return "✅ Finished redeeming codes";
+        for (const user of users) {
+            const result = yield redeemForUser(user.userId, user.username, giftCode);
+            yield message.channel.send(result);
         }
-        catch (error) {
-            console.error("Error handling redeem message:", error);
-            return "❌ An error occurred while redeeming codes.";
-        }
-        finally {
-            yield browser.close();
-        }
+        return "✅ Finished redeeming codes";
     });
 }
 function handleListUsers(message, guildId) {
