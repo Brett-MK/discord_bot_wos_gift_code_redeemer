@@ -1,5 +1,6 @@
 import { config } from "dotenv";
 import { Client, GatewayIntentBits, Message, TextChannel } from "discord.js";
+import { chromium } from "playwright";
 import {
   addUserToSheet,
   createGuildSheet,
@@ -14,10 +15,13 @@ import {
   LIST_HELP_MESSAGE,
   REDEEM_HELP_MESSAGE,
 } from "./help-messages.const.js";
+import pLimit from "p-limit";
 
 config();
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN!;
+
+const limit = pLimit(5);
 
 const discordClient = new Client({
   intents: [
@@ -26,6 +30,14 @@ const discordClient = new Client({
     GatewayIntentBits.MessageContent,
   ],
 });
+
+function chunk(array: any[], size: number): any[][] {
+  const chunks: any[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
 
 async function handleRedeemMessage(
   message: Message,
@@ -37,13 +49,30 @@ async function handleRedeemMessage(
     return "❌ No users found!";
   }
 
-  for (const user of users) {
-    const result = await redeemForUser(user.userId, user.username, giftCode);
+  const browser = await chromium.launch({ headless: true });
 
-    await (message.channel as TextChannel).send(result);
+  const userBatches = chunk(users, 10);
+
+  try {
+    for (const batch of userBatches) {
+      const redeemPromises = batch.map(async (user) => {
+        const { userId, username } = user;
+        const result = await limit(() =>
+          redeemForUser(userId, username, giftCode, browser)
+        );
+        await (message.channel as TextChannel).send(result);
+      });
+
+      await Promise.all(redeemPromises);
+    }
+
+    return "✅ Finished redeeming codes";
+  } catch (error) {
+    console.error("Error handling redeem message:", error);
+    return "❌ An error occurred while redeeming codes.";
+  } finally {
+    await browser.close();
   }
-
-  return "✅ Finished redeeming codes";
 }
 
 async function handleListUsers(message: Message, guildId: string) {
