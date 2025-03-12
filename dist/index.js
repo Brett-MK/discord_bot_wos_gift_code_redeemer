@@ -9,8 +9,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 import { config } from "dotenv";
 import { Client, GatewayIntentBits } from "discord.js";
-import { chromium } from "playwright";
 import { addUserToSheet, createGuildSheet, deleteUserFromSheet, getUsersFromSheet, } from "./google-sheets.js";
+import { redeemForUser } from "./redeem-helper.js";
+import { ADD_HELP_MESSAGE, DELETE_HELP_MESSAGE, HELP_MESSAGE, LIST_HELP_MESSAGE, REDEEM_HELP_MESSAGE, } from "./help-messages.const.js";
 config();
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const discordClient = new Client({
@@ -20,42 +21,44 @@ const discordClient = new Client({
         GatewayIntentBits.MessageContent,
     ],
 });
-// Function to log in and redeem for a given user ID with a gift code
-function redeemForUser(userId, username, giftCode) {
+function handleRedeemMessage(message, guildId, giftCode) {
     return __awaiter(this, void 0, void 0, function* () {
-        const browser = yield chromium.launch({ headless: true });
-        const page = yield browser.newPage();
-        try {
-            // Go to the URL
-            yield page.goto("https://wos-giftcode.centurygame.com/");
-            // Fill the player ID
-            yield page.fill('input[placeholder="Player ID"]', userId);
-            // Click login button
-            const loginBtn = page.locator(".login_btn");
-            yield loginBtn.click();
-            try {
-                // Ensure login button disappears after login
-                yield page.waitForSelector(".login_btn", {
-                    state: "hidden",
-                    timeout: 5000,
-                });
-            }
-            catch (error) {
-                return `❌ ${username}:${userId} - check UserID, timed out logging in.`;
-            }
-            // Fill in the gift code
-            yield page.fill('input[placeholder="Enter Gift Code"]', giftCode);
-            // Click the redeem button
-            yield page.locator(".exchange_btn").click();
-            // Get the message
-            const message = yield page.locator(".msg").textContent();
-            yield browser.close();
-            return `✅ ${username}:${userId} - ${message}`;
+        const users = yield getUsersFromSheet(guildId);
+        if (users.length === 0) {
+            return "❌ No users found!";
         }
-        catch (error) {
-            yield browser.close();
-            console.error(`Error redeeming code for user ${username}:${userId}:`, error);
-            return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
+        for (const user of users) {
+            const result = yield redeemForUser(user.userId, user.username, giftCode);
+            yield message.channel.send(result);
+        }
+        return "✅ Finished redeeming codes";
+    });
+}
+function handleListUsers(message, guildId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const users = yield getUsersFromSheet(guildId);
+        if (users.length === 0) {
+            return message.reply("❌ No users found!");
+        }
+        const userList = users
+            .map((user) => `${user.username}:${user.userId}`)
+            .join("\n");
+        // Split the user list into chunks of 2000 characters (discord max message size)
+        const chunkSize = 2000;
+        let chunkStart = 0;
+        while (chunkStart < userList.length) {
+            let chunkEnd = chunkStart + chunkSize;
+            // Ensure chunk does not cut off a username by looking back at the last new line
+            if (chunkEnd < userList.length) {
+                // Find the last newline within the chunk size
+                const lastNewLine = userList.lastIndexOf("\n", chunkEnd);
+                if (lastNewLine > chunkStart) {
+                    chunkEnd = lastNewLine; // Adjust chunk end to avoid cutting off username
+                }
+            }
+            const chunk = userList.slice(chunkStart, chunkEnd);
+            yield message.channel.send(chunk);
+            chunkStart = chunkEnd; // Move the start of the next chunk
         }
     });
 }
@@ -67,27 +70,17 @@ discordClient.on("messageCreate", (message) => __awaiter(void 0, void 0, void 0,
     switch (args[0]) {
         case "!redeem": {
             if (args.length != 2) {
-                return message.reply("⚠️ Usage: `!redeem <giftcode>");
+                return message.reply(REDEEM_HELP_MESSAGE);
             }
-            const giftCode = args[1]; // Extract the gift code
+            const giftCode = args[1];
             message.reply(`🔄 Redeeming code **${giftCode}** for all users...`);
-            const users = yield getUsersFromSheet(guildId);
-            if (users.length === 0) {
-                return message.reply("❌ No users found!");
-            }
-            for (const user of users) {
-                const result = yield redeemForUser(user.userId, user.username, giftCode);
-                yield message.channel.send(result);
-            }
-            message.reply("✅ Finished redeeming codes");
+            const result = yield handleRedeemMessage(message, guildId, giftCode);
+            message.reply(result);
             break;
         }
         case "!add": {
-            if (args.length != 3) {
-                return message.reply("⚠️ Usage: `!add <userId> <username> (no spaces in username)`");
-            }
-            if (isNaN(parseInt(args[1]))) {
-                return message.reply("⚠️ Usage: `!add <userId> <username> (no spaces in username)`");
+            if (args.length != 3 || isNaN(parseInt(args[1]))) {
+                return message.reply(ADD_HELP_MESSAGE);
             }
             const result = yield addUserToSheet(guildId, args[1], args[2]);
             message.reply(result);
@@ -95,7 +88,7 @@ discordClient.on("messageCreate", (message) => __awaiter(void 0, void 0, void 0,
         }
         case "!delete": {
             if (args.length != 2) {
-                return message.reply("⚠️ Usage: `!delete <userId>`");
+                return message.reply(DELETE_HELP_MESSAGE);
             }
             const result = yield deleteUserFromSheet(guildId, args[1]);
             message.reply(result);
@@ -103,32 +96,21 @@ discordClient.on("messageCreate", (message) => __awaiter(void 0, void 0, void 0,
         }
         case "!list": {
             if (args.length != 1) {
-                return message.reply("⚠️ Usage: `!list`");
+                return message.reply(LIST_HELP_MESSAGE);
             }
-            const users = yield getUsersFromSheet(guildId);
-            if (users.length === 0) {
-                return message.reply("❌ No users found!");
+            yield handleListUsers(message, guildId);
+        }
+        case "!help": {
+            if (args.length != 1) {
+                return message.reply(HELP_MESSAGE);
             }
-            const userList = users
-                .map((user) => `${user.username}:${user.userId}`)
-                .join("\n");
-            // Split the user list into chunks of 2000 characters (discord max message size)
-            const chunkSize = 2000;
-            let chunkStart = 0;
-            while (chunkStart < userList.length) {
-                let chunkEnd = chunkStart + chunkSize;
-                // Ensure chunk does not cut off a username by looking back at the last new line
-                if (chunkEnd < userList.length) {
-                    // Find the last newline within the chunk size
-                    const lastNewLine = userList.lastIndexOf("\n", chunkEnd);
-                    if (lastNewLine > chunkStart) {
-                        chunkEnd = lastNewLine; // Adjust chunk end to avoid cutting off username
-                    }
-                }
-                const chunk = userList.slice(chunkStart, chunkEnd);
-                yield message.channel.send(chunk);
-                chunkStart = chunkEnd; // Move the start of the next chunk
-            }
+            const helpMessages = [
+                LIST_HELP_MESSAGE,
+                ADD_HELP_MESSAGE,
+                DELETE_HELP_MESSAGE,
+                REDEEM_HELP_MESSAGE,
+            ];
+            return message.reply(helpMessages.join("\n"));
         }
         default: {
             break;

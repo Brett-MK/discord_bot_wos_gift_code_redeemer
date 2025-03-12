@@ -1,12 +1,19 @@
 import { config } from "dotenv";
 import { Client, GatewayIntentBits, Message, TextChannel } from "discord.js";
-import { chromium, Page } from "playwright";
 import {
   addUserToSheet,
   createGuildSheet,
   deleteUserFromSheet,
   getUsersFromSheet,
 } from "./google-sheets.js";
+import { redeemForUser } from "./redeem-helper.js";
+import {
+  ADD_HELP_MESSAGE,
+  DELETE_HELP_MESSAGE,
+  HELP_MESSAGE,
+  LIST_HELP_MESSAGE,
+  REDEEM_HELP_MESSAGE,
+} from "./help-messages.const.js";
 
 config();
 
@@ -20,54 +27,55 @@ const discordClient = new Client({
   ],
 });
 
-// Function to log in and redeem for a given user ID with a gift code
-async function redeemForUser(
-  userId: string,
-  username: string,
+async function handleRedeemMessage(
+  message: Message,
+  guildId: string,
   giftCode: string
 ): Promise<string> {
-  const browser = await chromium.launch({ headless: true });
-  const page: Page = await browser.newPage();
+  const users = await getUsersFromSheet(guildId);
+  if (users.length === 0) {
+    return "❌ No users found!";
+  }
 
-  try {
-    // Go to the URL
-    await page.goto("https://wos-giftcode.centurygame.com/");
+  for (const user of users) {
+    const result = await redeemForUser(user.userId, user.username, giftCode);
 
-    // Fill the player ID
-    await page.fill('input[placeholder="Player ID"]', userId);
+    await (message.channel as TextChannel).send(result);
+  }
 
-    // Click login button
-    const loginBtn = page.locator(".login_btn");
-    await loginBtn.click();
+  return "✅ Finished redeeming codes";
+}
 
-    try {
-      // Ensure login button disappears after login
-      await page.waitForSelector(".login_btn", {
-        state: "hidden",
-        timeout: 5000,
-      });
-    } catch (error) {
-      return `❌ ${username}:${userId} - check UserID, timed out logging in.`;
+async function handleListUsers(message: Message, guildId: string) {
+  const users = await getUsersFromSheet(guildId);
+
+  if (users.length === 0) {
+    return message.reply("❌ No users found!");
+  }
+
+  const userList = users
+    .map((user) => `${user.username}:${user.userId}`)
+    .join("\n");
+
+  // Split the user list into chunks of 2000 characters (discord max message size)
+  const chunkSize = 2000;
+  let chunkStart = 0;
+
+  while (chunkStart < userList.length) {
+    let chunkEnd = chunkStart + chunkSize;
+
+    // Ensure chunk does not cut off a username by looking back at the last new line
+    if (chunkEnd < userList.length) {
+      // Find the last newline within the chunk size
+      const lastNewLine = userList.lastIndexOf("\n", chunkEnd);
+      if (lastNewLine > chunkStart) {
+        chunkEnd = lastNewLine; // Adjust chunk end to avoid cutting off username
+      }
     }
 
-    // Fill in the gift code
-    await page.fill('input[placeholder="Enter Gift Code"]', giftCode);
-
-    // Click the redeem button
-    await page.locator(".exchange_btn").click();
-
-    // Get the message
-    const message = await page.locator(".msg").textContent();
-
-    await browser.close();
-    return `✅ ${username}:${userId} - ${message}`;
-  } catch (error) {
-    await browser.close();
-    console.error(
-      `Error redeeming code for user ${username}:${userId}:`,
-      error
-    );
-    return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
+    const chunk = userList.slice(chunkStart, chunkEnd);
+    await (message.channel as TextChannel).send(chunk);
+    chunkStart = chunkEnd; // Move the start of the next chunk
   }
 }
 
@@ -81,42 +89,21 @@ discordClient.on("messageCreate", async (message: Message) => {
   switch (args[0]) {
     case "!redeem": {
       if (args.length != 2) {
-        return message.reply("⚠️ Usage: `!redeem <giftcode>");
+        return message.reply(REDEEM_HELP_MESSAGE);
       }
+      const giftCode = args[1];
 
-      const giftCode = args[1]; // Extract the gift code
       message.reply(`🔄 Redeeming code **${giftCode}** for all users...`);
 
-      const users = await getUsersFromSheet(guildId);
-      if (users.length === 0) {
-        return message.reply("❌ No users found!");
-      }
+      const result = await handleRedeemMessage(message, guildId, giftCode);
 
-      for (const user of users) {
-        const result = await redeemForUser(
-          user.userId,
-          user.username,
-          giftCode
-        );
-
-        await (message.channel as TextChannel).send(result);
-      }
-
-      message.reply("✅ Finished redeeming codes");
+      message.reply(result);
       break;
     }
 
     case "!add": {
-      if (args.length != 3) {
-        return message.reply(
-          "⚠️ Usage: `!add <userId> <username> (no spaces in username)`"
-        );
-      }
-
-      if (isNaN(parseInt(args[1]))) {
-        return message.reply(
-          "⚠️ Usage: `!add <userId> <username> (no spaces in username)`"
-        );
+      if (args.length != 3 || isNaN(parseInt(args[1]))) {
+        return message.reply(ADD_HELP_MESSAGE);
       }
 
       const result = await addUserToSheet(guildId, args[1], args[2]);
@@ -126,48 +113,35 @@ discordClient.on("messageCreate", async (message: Message) => {
 
     case "!delete": {
       if (args.length != 2) {
-        return message.reply("⚠️ Usage: `!delete <userId>`");
+        return message.reply(DELETE_HELP_MESSAGE);
       }
 
       const result = await deleteUserFromSheet(guildId, args[1]);
       message.reply(result);
       break;
     }
+
     case "!list": {
       if (args.length != 1) {
-        return message.reply("⚠️ Usage: `!list`");
+        return message.reply(LIST_HELP_MESSAGE);
       }
 
-      const users = await getUsersFromSheet(guildId);
+      await handleListUsers(message, guildId);
+    }
 
-      if (users.length === 0) {
-        return message.reply("❌ No users found!");
+    case "!help": {
+      if (args.length != 1) {
+        return message.reply(HELP_MESSAGE);
       }
 
-      const userList = users
-        .map((user) => `${user.username}:${user.userId}`)
-        .join("\n");
+      const helpMessages = [
+        LIST_HELP_MESSAGE,
+        ADD_HELP_MESSAGE,
+        DELETE_HELP_MESSAGE,
+        REDEEM_HELP_MESSAGE,
+      ];
 
-      // Split the user list into chunks of 2000 characters (discord max message size)
-      const chunkSize = 2000;
-      let chunkStart = 0;
-
-      while (chunkStart < userList.length) {
-        let chunkEnd = chunkStart + chunkSize;
-
-        // Ensure chunk does not cut off a username by looking back at the last new line
-        if (chunkEnd < userList.length) {
-          // Find the last newline within the chunk size
-          const lastNewLine = userList.lastIndexOf("\n", chunkEnd);
-          if (lastNewLine > chunkStart) {
-            chunkEnd = lastNewLine; // Adjust chunk end to avoid cutting off username
-          }
-        }
-
-        const chunk = userList.slice(chunkStart, chunkEnd);
-        await (message.channel as TextChannel).send(chunk);
-        chunkStart = chunkEnd; // Move the start of the next chunk
-      }
+      return message.reply(helpMessages.join("\n"));
     }
 
     default: {
