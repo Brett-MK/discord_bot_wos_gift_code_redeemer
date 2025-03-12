@@ -36,13 +36,14 @@ function redeemForUser(userId, username, giftCode) {
             yield page.locator(".exchange_btn").click();
             // Get the message
             const message = yield page.locator(".msg").textContent();
-            yield browser.close();
             return `✅ ${username}:${userId} - ${message}`;
         }
         catch (error) {
-            yield browser.close();
             console.error(`Error redeeming code for user ${username}:${userId}:`, error);
             return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
+        }
+        finally {
+            yield browser.close();
         }
     });
 }

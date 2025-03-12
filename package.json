@@ -1,8 +1,14 @@
 {
+  "name": "wos_gift_redeemer",
+  "version": "1.0.0",
+  "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "tsc && node dist/index.js"
   },
+  "author": "Brett",
+  "license": "ISC",
+  "description": "A discord bot that allows users to redeem WOS gift codes for themselves and their friends",
   "dependencies": {
     "discord.js": "^14.18.0",
     "dotenv": "^16.4.7",
