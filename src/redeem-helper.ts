@@ -38,15 +38,15 @@ async function redeemForUser(
     // Get the message
     const message = await page.locator(".msg").textContent();
 
-    await browser.close();
     return `✅ ${username}:${userId} - ${message}`;
   } catch (error) {
-    await browser.close();
     console.error(
       `Error redeeming code for user ${username}:${userId}:`,
       error
     );
     return `❌ ${username}:${userId} - Failed to redeem code ${giftCode}, ${error}`;
+  } finally {
+    await browser.close();
   }
 }
 
