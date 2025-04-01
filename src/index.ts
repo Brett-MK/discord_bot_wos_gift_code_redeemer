@@ -38,9 +38,34 @@ async function handleRedeemMessage(
   }
 
   for (const user of users) {
-    const result = await redeemForUser(user.userId, user.username, giftCode);
+    let attempts = 0;
+    const maxRetries = 3;
+    let delay = 1000; // Start with 1 second delay
 
-    await (message.channel as TextChannel).send(result);
+    while (attempts < maxRetries) {
+      const result = await redeemForUser(user.userId, user.username, giftCode);
+
+      if (
+        result.includes("Gift Code not found, this is case-sensitive!") ||
+        result.includes("Expired, unable to claim.")
+      ) {
+        return "❌ Gift code is expired or not found";
+      } else if (result.includes("Server busy. Please try again later.")) {
+        attempts++;
+        if (attempts < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2; // Exponential backoff
+          continue;
+        } else {
+          await (message.channel as TextChannel).send(
+            `❌ Failed to redeem for ${user.username}:${user.userId} after multiple attempts.`
+          );
+        }
+      } else {
+        await (message.channel as TextChannel).send(result);
+        break; // Successful redemption, move to next user
+      }
+    }
   }
 
   return "✅ Finished redeeming codes";
