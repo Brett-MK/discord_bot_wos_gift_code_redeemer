@@ -39,7 +39,7 @@ async function handleRedeemMessage(
 
   for (const user of users) {
     let attempts = 0;
-    const maxRetries = 3;
+    const maxRetries = 5;
     let delay = 1000; // Start with 1 second delay
 
     while (attempts < maxRetries) {
