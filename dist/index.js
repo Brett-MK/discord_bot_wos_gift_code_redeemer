@@ -28,8 +28,31 @@ function handleRedeemMessage(message, guildId, giftCode) {
             return "❌ No users found!";
         }
         for (const user of users) {
-            const result = yield redeemForUser(user.userId, user.username, giftCode);
-            yield message.channel.send(result);
+            let attempts = 0;
+            const maxRetries = 3;
+            let delay = 1000; // Start with 1 second delay
+            while (attempts < maxRetries) {
+                const result = yield redeemForUser(user.userId, user.username, giftCode);
+                if (result.includes("Gift Code not found, this is case-sensitive!") ||
+                    result.includes("Expired, unable to claim.")) {
+                    return "❌ Gift code is expired or not found";
+                }
+                else if (result.includes("Server busy. Please try again later.")) {
+                    attempts++;
+                    if (attempts < maxRetries) {
+                        yield new Promise((resolve) => setTimeout(resolve, delay));
+                        delay *= 2; // Exponential backoff
+                        continue;
+                    }
+                    else {
+                        yield message.channel.send(`❌ Failed to redeem for ${user.username}:${user.userId} after multiple attempts.`);
+                    }
+                }
+                else {
+                    yield message.channel.send(result);
+                    break; // Successful redemption, move to next user
+                }
+            }
         }
         return "✅ Finished redeeming codes";
     });
