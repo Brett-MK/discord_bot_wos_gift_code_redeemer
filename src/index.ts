@@ -50,7 +50,10 @@ async function handleRedeemMessage(
         result.includes("Expired, unable to claim.")
       ) {
         return "❌ Gift code is expired or not found";
-      } else if (result.includes("Server busy. Please try again later.")) {
+      } else if (
+        result.includes("Server busy. Please try again later.") ||
+        result.includes("Check UserID, timed out logging in.")
+      ) {
         attempts++;
         if (attempts < maxRetries) {
           await new Promise((resolve) => setTimeout(resolve, delay));
@@ -58,7 +61,7 @@ async function handleRedeemMessage(
           continue;
         } else {
           await (message.channel as TextChannel).send(
-            `❌ Failed to redeem for ${user.username}:${user.userId} after multiple attempts.`
+            `❌ Failed to redeem for ${user.username}:${user.userId} after multiple attempts. Check the user ID.`
           );
         }
       } else {

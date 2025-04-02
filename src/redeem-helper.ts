@@ -26,7 +26,7 @@ async function redeemForUser(
         timeout: 5000,
       });
     } catch (error) {
-      return `❌ ${username}:${userId} - check UserID, timed out logging in.`;
+      return `❌ ${username}:${userId} - Check UserID, timed out logging in.`;
     }
 
     // Fill in the gift code

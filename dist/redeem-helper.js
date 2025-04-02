@@ -28,7 +28,7 @@ function redeemForUser(userId, username, giftCode) {
                 });
             }
             catch (error) {
-                return `❌ ${username}:${userId} - check UserID, timed out logging in.`;
+                return `❌ ${username}:${userId} - Check UserID, timed out logging in.`;
             }
             // Fill in the gift code
             yield page.fill('input[placeholder="Enter Gift Code"]', giftCode);

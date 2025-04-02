@@ -37,7 +37,8 @@ function handleRedeemMessage(message, guildId, giftCode) {
                     result.includes("Expired, unable to claim.")) {
                     return "❌ Gift code is expired or not found";
                 }
-                else if (result.includes("Server busy. Please try again later.")) {
+                else if (result.includes("Server busy. Please try again later.") ||
+                    result.includes("Check UserID, timed out logging in.")) {
                     attempts++;
                     if (attempts < maxRetries) {
                         yield new Promise((resolve) => setTimeout(resolve, delay));
@@ -45,7 +46,7 @@ function handleRedeemMessage(message, guildId, giftCode) {
                         continue;
                     }
                     else {
-                        yield message.channel.send(`❌ Failed to redeem for ${user.username}:${user.userId} after multiple attempts.`);
+                        yield message.channel.send(`❌ Failed to redeem for ${user.username}:${user.userId} after multiple attempts. Check the user ID.`);
                     }
                 }
                 else {
